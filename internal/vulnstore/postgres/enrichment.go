@@ -169,25 +169,30 @@ func hashEnrichment(r *driver.EnrichmentRecord) (k string, d []byte) {
 }
 
 func (s *Store) GetEnrichment(ctx context.Context, name string, tags []string) ([]driver.EnrichmentRecord, error) {
-	const query = `
-WITH
-	latest
-		AS (
-			SELECT
-				max(id) AS id
-			FROM
-				update_operation
-			WHERE
-				updater = $1
-		)
+	const uoQuery = `
+SELECT
+	max(id) AS id
+FROM
+	update_operation
+WHERE
+	updater = $1
+AND
+	kind = 'enrichment'`
+
+	var UOID int64
+	row := s.pool.QueryRow(ctx, query, name)
+	if err := row.Scan(UOID); err != nil {
+		return nil, err
+	}
+
+	const enrichmentQuery = `
 SELECT
 	e.tags, e.data
 FROM
 	enrichment AS e,
 	uo_enrich AS uo,
-	latest
 WHERE
-	uo.uo = latest.id
+	uo.uo = $1
 	AND uo.enrich = e.id
 	AND e.tags && $2::text[];`
 
@@ -199,7 +204,7 @@ WHERE
 	defer tx.Rollback(ctx)
 
 	results := make([]driver.EnrichmentRecord, 0, 8) // Guess at capacity.
-	rows, err := s.pool.Query(ctx, query, name, tags)
+	rows, err := s.pool.Query(ctx, query, UOID, tags)
 	if err != nil {
 		return nil, err
 	}
