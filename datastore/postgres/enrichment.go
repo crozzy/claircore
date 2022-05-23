@@ -185,7 +185,7 @@ WITH
 				updater = $1
 		)
 SELECT
-	e.tags, e.data
+	e.id, e.tags, e.data
 FROM
 	enrichment AS e,
 	uo_enrich AS uo,
@@ -222,7 +222,7 @@ WHERE
 		i := len(res)
 		res = append(res, driver.EnrichmentRecord{})
 		r := &res[i]
-		err = rows.Scan(&r.Tags, &r.Enrichment)
+		err = rows.Scan(&r.ID, &r.Tags, &r.Enrichment)
 		if err != nil {
 			return nil, err
 		}

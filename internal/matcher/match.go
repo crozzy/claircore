@@ -156,9 +156,11 @@ func EnrichedMatch(ctx context.Context, ir *claircore.IndexReport, ms []driver.M
 	// Set up a pool to run the enrichers and attach results to the report.
 	eCh := make(chan driver.Enricher)
 	type entry struct {
-		kind string
-		msg  []json.RawMessage
+		kind       string
+		enrichMap  map[string]json.RawMessage
+		vulnEnrich map[string][]string
 	}
+
 	rCh := make(chan *entry, lim)
 	eg, ectx := errgroup.WithContext(ctx)
 	eg.Go(func() error { // Sender
@@ -174,11 +176,25 @@ func EnrichedMatch(ctx context.Context, ir *claircore.IndexReport, ms []driver.M
 		return nil
 	})
 	eg.Go(func() error { // Collector
-		em := make(map[string][]json.RawMessage)
+		em := make(map[string]interface{})
+		ev := make(map[string][]string)
+		vr.Enrichments = make(map[string]map[string]interface{})
 		for e := range rCh {
-			em[e.kind] = append(em[e.kind], e.msg...)
+			for id, enrichment := range e.enrichMap {
+				em[id] = enrichment
+			}
+			vr.Enrichments[e.kind] = em
+			for vId, es := range e.vulnEnrich {
+				ev[vId] = append(ev[vId], es...)
+			}
 		}
-		vr.Enrichments = em
+		for id, cves := range ev {
+			if vr.Enrichments["vulnerability_enrichments"] == nil {
+				vr.Enrichments["vulnerability_enrichments"] = make(map[string]interface{})
+			}
+			vr.Enrichments["vulnerability_enrichments"][id] = cves
+		}
+
 		return nil
 	})
 	// Use an atomic to track closing the results channel.
@@ -192,22 +208,23 @@ func EnrichedMatch(ctx context.Context, ir *claircore.IndexReport, ms []driver.M
 			}()
 			var e driver.Enricher
 			for e = range eCh {
-				kind, msg, err := e.Enrich(ectx, getter(s, e.Name()), vr)
+				kind, em, ve, err := e.Enrich(ectx, getter(s, e.Name()), vr)
 				if err != nil {
 					zlog.Error(ctx).
 						Err(err).
 						Msg("enrichment error")
 					continue
 				}
-				if len(msg) == 0 {
+				if len(em) == 0 {
 					zlog.Debug(ctx).
 						Str("name", e.Name()).
 						Msg("enricher reported nothing, skipping")
 					continue
 				}
 				res := entry{
-					msg:  msg,
-					kind: kind,
+					enrichMap:  em,
+					vulnEnrich: ve,
+					kind:       kind,
 				}
 				select {
 				case rCh <- &res:

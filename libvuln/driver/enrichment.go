@@ -13,6 +13,7 @@ import (
 type EnrichmentRecord struct {
 	Tags       []string
 	Enrichment json.RawMessage
+	ID         string
 }
 
 // This EnrichmentRecord is basically using json.RawMessage to represent "Any"
@@ -86,5 +87,5 @@ type Enricher interface {
 	//
 	// The implemented Enricher returns JSON blobs of Enrichment data and a key
 	// explaining to the client how to interpret the data.
-	Enrich(context.Context, EnrichmentGetter, *claircore.VulnerabilityReport) (string, []json.RawMessage, error)
+	Enrich(context.Context, EnrichmentGetter, *claircore.VulnerabilityReport) (string, map[string]json.RawMessage, map[string][]string, error)
 }

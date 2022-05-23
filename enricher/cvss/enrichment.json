@@ -1,0 +1,28 @@
+{
+    "enrichments": {
+        "message/vnd.clair.map.vulnerability; enricher=clair.cvss schema=https://csrc.nist.gov/schema/nvd/feed/1.1/cvss-v3.x.json": [
+            {
+                "6855A152F053B6768673DB87944BA6B0": {
+                    "version": "3.1",
+                    "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+                    "attackVector": "NETWORK",
+                    "attackComplexity": "LOW",
+                    "privilegesRequired": "LOW",
+                    "userInteraction": "NONE",
+                    "scope": "UNCHANGED",
+                    "confidentialityImpact": "HIGH",
+                    "integrityImpact": "HIGH",
+                    "availabilityImpact": "HIGH",
+                    "baseScore": 8.8,
+                    "baseSeverity": "HIGH"
+                }
+            }
+        ]
+    },
+    "vulnerability_enrichments": {
+        "<vuln_id>": [
+            "6855A152F053B6768673DB87944BA6B0",
+            "8B132A850B3B20721875A32D22E336C6"
+        ]
+    }
+}

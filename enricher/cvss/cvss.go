@@ -32,7 +32,7 @@ var (
 
 const (
 	// Type is the type of data returned from the Enricher's Enrich method.
-	Type = `message/vnd.clair.map.vulnerability; enricher=clair.cvss schema=https://csrc.nist.gov/schema/nvd/feed/1.1/cvss-v3.x.json`
+	Type = `message/vnd.clair.map.vulnerability; version=v2 enricher=clair.cvss schema=https://csrc.nist.gov/schema/nvd/feed/1.1/cvss-v3.x.json`
 	// DefaultFeeds is the default place to look for CVE feeds.
 	//
 	// The enricher expects the structure to mirror that found here: files
@@ -250,12 +250,13 @@ func (e *Enricher) ParseEnrichment(ctx context.Context, rc io.ReadCloser) ([]dri
 var cveRegexp = regexp.MustCompile(`(?i:cve)[-_][0-9]{4}[-_][0-9]{4,}`)
 
 // Enrich implements driver.Enricher.
-func (e *Enricher) Enrich(ctx context.Context, g driver.EnrichmentGetter, r *claircore.VulnerabilityReport) (string, []json.RawMessage, error) {
+func (e *Enricher) Enrich(ctx context.Context, g driver.EnrichmentGetter, r *claircore.VulnerabilityReport) (string, map[string]json.RawMessage, map[string][]string, error) {
 	ctx = zlog.ContextWithValues(ctx, "component", "enricher/cvss/Enricher/Enrich")
 
 	// We return any CVSS blobs for CVEs mentioned in the free-form parts of the
 	// vulnerability.
-	m := make(map[string][]json.RawMessage)
+	enrichmentMap := make(map[string]json.RawMessage)
+	vulnEnrichment := make(map[string][]string)
 
 	erCache := make(map[string][]driver.EnrichmentRecord)
 	for id, v := range r.Vulnerabilities {
@@ -289,7 +290,7 @@ func (e *Enricher) Enrich(ctx context.Context, g driver.EnrichmentGetter, r *cla
 			var err error
 			rec, err = g.GetEnrichment(ctx, ts)
 			if err != nil {
-				return "", nil, err
+				return "", nil, nil, err
 			}
 			erCache[cveKey] = rec
 		}
@@ -297,15 +298,12 @@ func (e *Enricher) Enrich(ctx context.Context, g driver.EnrichmentGetter, r *cla
 			Int("count", len(rec)).
 			Msg("found records")
 		for _, r := range rec {
-			m[id] = append(m[id], r.Enrichment)
+			enrichmentMap[r.Tags[0]] = r.Enrichment
+			vulnEnrichment[id] = append(vulnEnrichment[id], r.Tags[0])
 		}
 	}
-	if len(m) == 0 {
-		return Type, nil, nil
+	if len(enrichmentMap) == 0 {
+		return Type, nil, nil, nil
 	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return Type, nil, err
-	}
-	return Type, []json.RawMessage{b}, nil
+	return Type, enrichmentMap, vulnEnrichment, nil
 }
