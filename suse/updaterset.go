@@ -15,10 +15,10 @@ var suseReleases = []Release{
 	Leap151,
 }
 
-func UpdaterSet(_ context.Context) (driver.UpdaterSet, error) {
+func UpdaterSet(ctx context.Context) (driver.UpdaterSet, error) {
 	us := driver.NewUpdaterSet()
 	for _, release := range suseReleases {
-		u, err := NewUpdater(release)
+		u, err := NewUpdater(ctx, release)
 		if err != nil {
 			return us, fmt.Errorf("failed to create updater: %v", err)
 		}

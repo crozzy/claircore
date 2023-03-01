@@ -1,12 +1,14 @@
 package suse
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 
 	"github.com/quay/claircore/libvuln/driver"
 	"github.com/quay/claircore/pkg/ovalutil"
+	"github.com/quay/zlog"
 )
 
 var upstreamBase *url.URL
@@ -33,7 +35,7 @@ var (
 )
 
 // NewUpdater configures an updater to fetch the specified Release.
-func NewUpdater(r Release, opts ...Option) (*Updater, error) {
+func NewUpdater(ctx context.Context, r Release, opts ...Option) (*Updater, error) {
 	u := &Updater{
 		release: r,
 	}
@@ -52,6 +54,7 @@ func NewUpdater(r Release, opts ...Option) (*Updater, error) {
 			return nil, err
 		}
 	}
+	zlog.Info(ctx).Str("url", u.Fetcher.URL.String()).Str("updater name", u.Name()).Msg("this is the fetcher url")
 	return u, nil
 }
 
