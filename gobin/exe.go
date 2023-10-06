@@ -9,10 +9,10 @@ import (
 	"strings"
 	_ "unsafe" // for error linkname tricks
 
-	"github.com/Masterminds/semver"
 	"github.com/quay/zlog"
 
 	"github.com/quay/claircore"
+	"github.com/quay/claircore/toolkit/types"
 )
 
 //go:linkname errNotGoExe debug/buildinfo.errNotGoExe
@@ -54,14 +54,11 @@ func toPackages(ctx context.Context, out *[]*claircore.Package, p string, r io.R
 	// the binary, which may be distinct from the version of the stdlib used?
 	// Need to investigate.
 	var runtimeVer claircore.Version
-	rtv, err := semver.NewVersion(strings.TrimPrefix(bi.GoVersion, "go"))
-	switch {
-	case errors.Is(err, nil):
+	rtv, ok := types.NewSemver(strings.TrimPrefix(bi.GoVersion, "go"))
+	if ok {
 		runtimeVer = fromSemver(rtv)
-	case errors.Is(err, semver.ErrInvalidSemVer):
+	} else {
 		badVers["stdlib"] = bi.GoVersion
-	default:
-		return err
 	}
 
 	*out = append(*out, &claircore.Package{
@@ -79,9 +76,9 @@ func toPackages(ctx context.Context, out *[]*claircore.Package, p string, r io.R
 	}
 	var mainVer claircore.Version
 	var mmv string
-	mpv, err := semver.NewVersion(bi.Main.Version)
+	mpv, ok := types.NewSemver(bi.Main.Version)
 	switch {
-	case errors.Is(err, nil):
+	case ok:
 		mainVer = fromSemver(mpv)
 	case bi.Main.Version == `(devel)`:
 		// This is currently the state of any main module built from source; see
@@ -112,11 +109,9 @@ func toPackages(ctx context.Context, out *[]*claircore.Package, p string, r io.R
 		if len(v) != 0 {
 			mmv = fmt.Sprintf("(devel) (%s)", strings.Join(v, ", "))
 		}
-	case errors.Is(err, semver.ErrInvalidSemVer):
+	case !ok:
 		badVers[bi.Main.Path] = bi.Main.Version
 		mmv = bi.Main.Version
-	default:
-		return err
 	}
 
 	*out = append(*out, &claircore.Package{
@@ -133,14 +128,11 @@ func toPackages(ctx context.Context, out *[]*claircore.Package, p string, r io.R
 	}
 	for _, d := range bi.Deps {
 		var nv claircore.Version
-		ver, err := semver.NewVersion(d.Version)
-		switch {
-		case errors.Is(err, nil):
+		ver, ok := types.NewSemver(d.Version)
+		if ok {
 			nv = fromSemver(ver)
-		case errors.Is(err, semver.ErrInvalidSemVer):
+		} else {
 			badVers[d.Path] = d.Version
-		default:
-			return err
 		}
 
 		*out = append(*out, &claircore.Package{
@@ -162,12 +154,12 @@ func toPackages(ctx context.Context, out *[]*claircore.Package, p string, r io.R
 	return nil
 }
 
-// FromSemver is the SemVer to claircore.Version mapping used by this package.
-func fromSemver(v *semver.Version) (out claircore.Version) {
+// FromString is the SemVer to claircore.Version mapping used by this package.
+func fromSemver(v types.Semver) (out claircore.Version) {
 	out.Kind = `semver`
 	// Leave a leading epoch, for good measure.
-	out.V[1] = int32(v.Major())
-	out.V[2] = int32(v.Minor())
-	out.V[3] = int32(v.Patch())
+	out.V[1] = int32(v.Major)
+	out.V[2] = int32(v.Minor)
+	out.V[3] = int32(v.Patch)
 	return out
 }
