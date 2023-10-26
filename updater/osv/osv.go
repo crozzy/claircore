@@ -31,6 +31,8 @@ var (
 	_ driver.Configurable      = (*updater)(nil)
 	_ driver.UpdaterSetFactory = (*Factory)(nil)
 	_ driver.Configurable      = (*Factory)(nil)
+
+	useCVE = true
 )
 
 // DefaultURL is the S3 bucket provided by the OSV project.
@@ -490,6 +492,15 @@ func (e *ecs) Insert(ctx context.Context, skipped *stats, name string, a *adviso
 	var b strings.Builder
 	var proto claircore.Vulnerability
 	proto.Name = a.ID
+	if useCVE {
+		if strings.HasPrefix(proto.Name, "GHSA") {
+			for _, al := range a.Aliases {
+				if strings.HasPrefix(al, "CVE") {
+					proto.Name = al
+				}
+			}
+		}
+	}
 	proto.Description = a.Summary
 	proto.Issued = a.Published
 	proto.Updater = e.Updater
