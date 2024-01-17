@@ -190,6 +190,8 @@ func findDeliciousEgg(ctx context.Context, sys fs.FS) (out []string, err error) 
 			ev.Discard().Send()
 			// Should we chase symlinks with the correct name?
 			return nil
+		case strings.HasPrefix(filepath.Base(p), ".wh."):
+			return nil
 		case strings.HasSuffix(p, `.egg/EGG-INFO/PKG-INFO`):
 			ev = ev.Str("kind", ".egg")
 		case strings.HasSuffix(p, `.egg-info`):
