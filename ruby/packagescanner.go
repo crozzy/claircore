@@ -139,7 +139,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 			Name:           name,
 			Version:        version,
 			Kind:           claircore.BINARY,
-			PackageDB:      g,
+			PackageDB:      "ruby:" + g,
+			Filepath:       g,
 			RepositoryHint: repository,
 		})
 	}
