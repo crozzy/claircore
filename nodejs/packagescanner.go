@@ -106,6 +106,7 @@ func (s *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*claircor
 			Version:        pkgJSON.Version,
 			Kind:           claircore.BINARY,
 			PackageDB:      "nodejs:" + p,
+			Filepath:       p,
 			RepositoryHint: repository,
 		})
 	}
