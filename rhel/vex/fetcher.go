@@ -277,8 +277,8 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 		}
 	}
 
-	switch {
-	case err == io.EOF, err == nil:
+	switch err {
+	case io.EOF, nil:
 	default:
 		return nil, hint, fmt.Errorf("error parsing the csv file: %w", err)
 	}
