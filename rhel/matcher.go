@@ -14,7 +14,9 @@ import (
 )
 
 // Matcher implements driver.Matcher.
-type Matcher struct{}
+type Matcher struct {
+	ignoreUnpatched bool
+}
 
 var _ driver.Matcher = (*Matcher)(nil)
 
@@ -29,10 +31,12 @@ func (*Matcher) Filter(record *claircore.IndexRecord) bool {
 }
 
 // Query implements driver.Matcher.
-func (*Matcher) Query() []driver.MatchConstraint {
-	return []driver.MatchConstraint{
-		driver.PackageModule,
+func (m *Matcher) Query() []driver.MatchConstraint {
+	mcs := []driver.MatchConstraint{driver.PackageModule}
+	if m.ignoreUnpatched {
+		mcs = append(mcs, driver.HasFixedInVersion)
 	}
+	return mcs
 }
 
 // isCPESubstringMatch is a hack that accounts for CPEs in the VEX

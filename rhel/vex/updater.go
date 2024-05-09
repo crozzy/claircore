@@ -32,18 +32,16 @@ const (
 )
 
 type Factory struct {
-	c               *http.Client
-	base            *url.URL
-	ignoreUnpatched bool
+	c    *http.Client
+	base *url.URL
 }
 
 // UpdaterSet constructs one VEXUpdater
 func (f *Factory) UpdaterSet(_ context.Context) (driver.UpdaterSet, error) {
 	us := driver.NewUpdaterSet()
 	u := &VEXUpdater{
-		url:             f.base,
-		client:          f.c,
-		ignoreUnpatched: f.ignoreUnpatched,
+		url:    f.base,
+		client: f.c,
 	}
 	err := us.Add(u)
 	if err != nil {
@@ -55,8 +53,6 @@ func (f *Factory) UpdaterSet(_ context.Context) (driver.UpdaterSet, error) {
 type FactoryConfig struct {
 	// URL indicates the base URL for the VEX.
 	URL string `json:"url" yaml:"url"`
-	// IgnoreUnpatched dictates whether to ingest known affected advisories from the VEX security data.
-	IgnoreUnpatched bool `json:"ignore_unpatched" yaml:"ignore_unpatched"`
 }
 
 func (f *Factory) Configure(ctx context.Context, cf driver.ConfigUnmarshaler, c *http.Client) error {
@@ -81,9 +77,8 @@ func (f *Factory) Configure(ctx context.Context, cf driver.ConfigUnmarshaler, c 
 }
 
 type VEXUpdater struct {
-	url             *url.URL
-	client          *http.Client
-	ignoreUnpatched bool
+	url    *url.URL
+	client *http.Client
 }
 
 // fingerprint is used to track the state of the changes.csv endpoint.

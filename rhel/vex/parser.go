@@ -86,13 +86,11 @@ func (u *VEXUpdater) DeltaParse(ctx context.Context, contents io.ReadCloser) ([]
 				return nil, nil, err
 			}
 			out[name] = fixedVulns
-			if !u.ignoreUnpatched {
-				knownAffectedVulns, err := creator.knownAffectedVulnerabilities(ctx, v, protoVuln)
-				if err != nil {
-					return nil, nil, err
-				}
-				out[name] = append(out[name], knownAffectedVulns...)
+			knownAffectedVulns, err := creator.knownAffectedVulnerabilities(ctx, v, protoVuln)
+			if err != nil {
+				return nil, nil, err
 			}
+			out[name] = append(out[name], knownAffectedVulns...)
 		}
 	}
 	vulns := []*claircore.Vulnerability{}
