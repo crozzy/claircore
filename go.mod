@@ -21,7 +21,7 @@ require (
 	github.com/quay/goval-parser v0.8.8
 	github.com/quay/zlog v1.1.8
 	github.com/remind101/migrate v0.0.0-20170729031349-52c1edff7319
-	github.com/rs/zerolog v1.30.0
+	github.com/rs/zerolog v1.32.0
 	github.com/ulikunitz/xz v0.5.11
 	go.opentelemetry.io/otel v1.25.0
 	go.opentelemetry.io/otel/trace v1.25.0
@@ -49,7 +49,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20231201235250-de7065d80cb9 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.16 // indirect
+	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
