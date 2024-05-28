@@ -31,6 +31,7 @@ func (u *VEXUpdater) DeltaParse(ctx context.Context, contents io.ReadCloser) ([]
 	// This map is needed for deduplication purposes, the compressed CSAF data maybe include
 	// entries that have been subsequently updated in the changes.
 	out := map[string][]*claircore.Vulnerability{}
+	deleted := []string{}
 
 	pc := NewProductCache()
 	rc := NewRepoCache()
@@ -42,6 +43,9 @@ func (u *VEXUpdater) DeltaParse(ctx context.Context, contents io.ReadCloser) ([]
 			return nil, nil, fmt.Errorf("error parsing CSAF: %w", err)
 		}
 		name := c.Document.Tracking.ID
+		if c.Document.Tracking.Status == "deleted" {
+			deleted = append(deleted, name)
+		}
 
 		var selfLink string
 		for _, r := range c.Document.References {
@@ -98,7 +102,7 @@ func (u *VEXUpdater) DeltaParse(ctx context.Context, contents io.ReadCloser) ([]
 		vulns = append(vulns, vs...)
 	}
 
-	return vulns, nil, nil
+	return vulns, deleted, nil
 }
 
 type repoCache struct {

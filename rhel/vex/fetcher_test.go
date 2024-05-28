@@ -32,9 +32,9 @@ func parseFilenameHeaders(data []byte) (string, http.Header, error) {
 	return string(compressedFilepath), http.Header(hdr), nil
 }
 
-func serveSecDB(t *testing.T) (string, *http.Client) {
+func serveSecDB(t *testing.T, txtarFile string) (string, *http.Client) {
 	mux := http.NewServeMux()
-	archive, err := txtar.ParseFile("testdata/server.txt")
+	archive, err := txtar.ParseFile(txtarFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func serveSecDB(t *testing.T) (string, *http.Client) {
 
 func TestFactory(t *testing.T) {
 	ctx := zlog.Test(context.Background(), t)
-	root, c := serveSecDB(t)
+	root, c := serveSecDB(t, "testdata/server.txt")
 	fac := &Factory{}
 	err := fac.Configure(ctx, func(v interface{}) error {
 		cf := v.(*FactoryConfig)
@@ -113,7 +113,7 @@ func TestFactory(t *testing.T) {
 	}
 
 	// Check saved vulns
-	expectedLnCt := 7
+	expectedLnCt := 8
 	lnCt := 0
 	r := bufio.NewReader(snappy.NewReader(data))
 	for b, err := r.ReadBytes('\n'); err == nil; b, err = r.ReadBytes('\n') {
@@ -140,10 +140,12 @@ func TestFactory(t *testing.T) {
 	if f.changesEtag != "something" {
 		t.Errorf("bad etag for the changes.csv endpoint: %s", f.changesEtag)
 	}
+	if f.deletionsEtag != "somethingelse" {
+		t.Errorf("bad etag for the deletions.csv endpoint: %s", f.deletionsEtag)
+	}
 	buf := &bytes.Buffer{}
 	sz, _ := newData.Read(buf.Bytes())
 	if sz != 0 {
 		t.Errorf("got too much data: %s", buf.String())
 	}
-
 }

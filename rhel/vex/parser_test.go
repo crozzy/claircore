@@ -21,19 +21,22 @@ func TestParse(t *testing.T) {
 	}
 
 	testcases := []struct {
-		name     string
-		filename string
-		expected int
+		name            string
+		filename        string
+		expectedVulns   int
+		expectedDeleted int
 	}{
 		{
-			name:     "six_advisories",
-			filename: "testdata/example_vex.jsonl",
-			expected: 546,
+			name:            "six_advisories_two_deletions",
+			filename:        "testdata/example_vex.jsonl",
+			expectedVulns:   546,
+			expectedDeleted: 2,
 		},
 		{
-			name:     "cve-2022-1705",
-			filename: "testdata/cve-2022-1705.jsonl",
-			expected: 736,
+			name:            "cve-2022-1705",
+			filename:        "testdata/cve-2022-1705.jsonl",
+			expectedVulns:   736,
+			expectedDeleted: 0,
 		},
 	}
 
@@ -66,14 +69,16 @@ func TestParse(t *testing.T) {
 				t.Errorf("failed to close snappy Writer: %v", err)
 			}
 
-			vulns, _, err := u.DeltaParse(c, io.NopCloser(&buf))
+			vulns, deleted, err := u.DeltaParse(c, io.NopCloser(&buf))
 			if err != nil {
 				t.Fatalf("failed to parse CSAF JSON: %v", err)
 			}
-			if len(vulns) != tc.expected {
-				t.Fatalf("expected %d vulns but got %d", tc.expected, len(vulns))
+			if len(vulns) != tc.expectedVulns {
+				t.Fatalf("expected %d vulns but got %d", tc.expectedVulns, len(vulns))
 			}
-
+			if len(deleted) != tc.expectedDeleted {
+				t.Fatalf("expected %d deleted but got %d", tc.expectedDeleted, len(deleted))
+			}
 		})
 	}
 }

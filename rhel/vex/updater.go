@@ -27,6 +27,7 @@ const (
 	baseURL        = "https://access.redhat.com/security/data/csaf/beta/vex/"
 	latestFile     = "archive_latest.txt"
 	changesFile    = "changes.csv"
+	deletionsFile  = "deletions.csv"
 	lookBackToYear = 2005
 	repoKey        = "rhel-cpe-repository"
 )
@@ -82,15 +83,21 @@ type VEXUpdater struct {
 }
 
 // fingerprint is used to track the state of the changes.csv endpoint.
+//
+// The spec (https://www.rfc-editor.org/rfc/rfc9110.html#name-etag) mentions
+// that there is no need for the client to be aware of how each entity tag
+// is constructed, however, it mentions that servers should avoid backslashes.
+// Hence, the `\` character is used as a separator when stringifying.
 type fingerprint struct {
-	changesEtag string
-	requestTime time.Time
+	changesEtag, deletionsEtag string
+	requestTime                time.Time
 }
 
-func NewFingerprint(etag string, requestTime time.Time) *fingerprint {
+func NewFingerprint(changesEtag string, deletionsEtag string, requestTime time.Time) *fingerprint {
 	return &fingerprint{
-		changesEtag: etag,
-		requestTime: requestTime,
+		changesEtag:   changesEtag,
+		deletionsEtag: deletionsEtag,
+		requestTime:   requestTime,
 	}
 }
 
@@ -99,22 +106,23 @@ func ParseFingerprint(in driver.Fingerprint) (*fingerprint, error) {
 	if fp == "" {
 		return &fingerprint{}, nil
 	}
-	f := strings.Split(fp, "_")
-	if len(f) != 2 {
+	f := strings.Split(fp, `\`)
+	if len(f) != 3 {
 		return nil, errors.New("could not parse fingerprint")
 	}
-	rt, err := time.Parse(time.RFC3339, f[1])
+	rt, err := time.Parse(time.RFC3339, f[2])
 	if err != nil {
-		return nil, fmt.Errorf("could not parse fingerprint's requestTime")
+		return nil, fmt.Errorf("could not parse fingerprint's requestTime: %w", err)
 	}
 	return &fingerprint{
-		changesEtag: f[0],
-		requestTime: rt,
+		changesEtag:   f[0],
+		deletionsEtag: f[1],
+		requestTime:   rt,
 	}, nil
 }
 
 func (fp *fingerprint) String() string {
-	return fp.changesEtag + "_" + fp.requestTime.Format(time.RFC3339)
+	return fp.changesEtag + `\` + fp.deletionsEtag + `\` + fp.requestTime.Format(time.RFC3339)
 }
 
 func (u *VEXUpdater) Name() string {

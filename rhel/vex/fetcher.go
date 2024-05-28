@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ import (
 
 var (
 	compressedFileTimeout = 2 * time.Minute
+	deletedTemplate       = `{"document":{"tracking":{"id":"%s","status":"deleted"}}}`
+	cvePathRegex          = regexp.MustCompile(`^\d{4}\/(cve-\d{4}-\d*).json$`)
 )
 
 func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.ReadCloser, driver.Fingerprint, error) {
@@ -165,16 +168,34 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 			Str("updater", u.Name()).
 			Int("entries written", entriesWritten).
 			Msg("finished writing compressed data to spool")
-
 	}
 
-	uri, err := u.url.Parse(changesFile)
+	err = u.processChanges(ctx, cw, fp)
 	if err != nil {
 		return nil, hint, err
+	}
+
+	err = u.processDeletions(ctx, cw, fp)
+	if err != nil {
+		return nil, hint, err
+	}
+
+	fp.requestTime = time.Now()
+	success = true
+	return f, driver.Fingerprint(fp.String()), nil
+}
+
+// processChanges deals with the published changes.csv, adding records
+// to the wtr is they are deemed to have changed since the compressed
+// file was last processed. wtr and fp can be modified.
+func (u *VEXUpdater) processChanges(ctx context.Context, wtr io.Writer, fp *fingerprint) error {
+	uri, err := u.url.Parse(changesFile)
+	if err != nil {
+		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri.String(), nil)
 	if err != nil {
-		return nil, hint, err
+		return err
 	}
 	if fp.changesEtag != "" {
 		req.Header.Add("If-None-Match", fp.changesEtag)
@@ -184,7 +205,7 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 		defer res.Body.Close()
 	}
 	if err != nil {
-		return nil, hint, err
+		return err
 	}
 
 	switch res.StatusCode {
@@ -194,11 +215,9 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 		}
 		fallthrough
 	case http.StatusNotModified:
-		// We could return driver.Unchanged here but we don't know for sure. Return the
-		// file that may have data read from the compressed file in it.
-		return f, hint, nil
+		return nil
 	default:
-		return nil, hint, fmt.Errorf("unexpected response from changes.csv: %s", res.Status)
+		return fmt.Errorf("unexpected response from changes.csv: %s", res.Status)
 	}
 	fp.changesEtag = res.Header.Get("etag")
 
@@ -212,29 +231,29 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 	rec, err := rd.Read()
 	for ; err == nil; rec, err = rd.Read() {
 		if len(rec) != 2 {
-			return nil, hint, fmt.Errorf("could not parse changes.csv file")
+			return fmt.Errorf("could not parse changes.csv file")
 		}
 
 		cvePath, uTime := rec[0], rec[1]
 		year, err := strconv.ParseInt(path.Dir(cvePath), 10, 64)
 		if err != nil {
-			return nil, hint, fmt.Errorf("error parsing year %w", err)
+			return fmt.Errorf("error parsing year %w", err)
 		}
 		if year < lookBackToYear {
 			continue
 		}
 		updatedTime, err := time.Parse(time.RFC3339, uTime)
 		if err != nil {
-			return nil, hint, fmt.Errorf("line %d: %w", l, err)
+			return fmt.Errorf("line %d: %w", l, err)
 		}
 		if updatedTime.After(fp.requestTime) {
 			advisoryURI, err := u.url.Parse(cvePath)
 			if err != nil {
-				return nil, hint, err
+				return err
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, advisoryURI.String(), nil)
 			if err != nil {
-				return nil, hint, fmt.Errorf("error creating advisory request %w", err)
+				return fmt.Errorf("error creating advisory request %w", err)
 			}
 
 			// Use a func here as we're in a loop and want to make sure the
@@ -245,7 +264,20 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 					return fmt.Errorf("error making advisory request %w", err)
 				}
 				defer res.Body.Close()
-				if res.StatusCode != http.StatusOK {
+				switch res.StatusCode {
+				case http.StatusOK:
+					// Add compacted JSON to buffer.
+					_, err = buf.ReadFrom(res.Body)
+					if err != nil {
+						return fmt.Errorf("error reading from buffer: %w", err)
+					}
+					zlog.Debug(ctx).Str("url", advisoryURI.String()).Msg("copying body to file")
+					err = json.Compact(&bc, buf.Bytes())
+					if err != nil {
+						return fmt.Errorf("error compressing JSON: %w", err)
+					}
+				default:
+					// Something went wrong, try and read some body and return an error.
 					var b strings.Builder
 					if _, err := io.Copy(&b, res.Body); err != nil {
 						zlog.Warn(ctx).Err(err).Msg("additional error while reading error response")
@@ -255,34 +287,102 @@ func (u *VEXUpdater) Fetch(ctx context.Context, hint driver.Fingerprint) (io.Rea
 					return fmt.Errorf("unexpected response from advisary URL: %s %s", res.Status, req.URL)
 				}
 
-				_, err = buf.ReadFrom(res.Body)
-				if err != nil {
-					return fmt.Errorf("error reading from buffer: %w", err)
-				}
-				zlog.Debug(ctx).Str("url", advisoryURI.String()).Msg("copying body to file")
-				err = json.Compact(&bc, buf.Bytes())
-				if err != nil {
-					return fmt.Errorf("error compressing JSON: %w", err)
-				}
 				bc.WriteByte('\n')
-				cw.Write(bc.Bytes())
+				wtr.Write(bc.Bytes())
 				buf.Reset()
 				bc.Reset()
 				l++
 				return nil
 			}()
 			if !errors.Is(err, nil) {
-				return nil, hint, err
+				return err
 			}
 		}
 	}
-
 	switch err {
-	case io.EOF, nil:
+	case io.EOF:
 	default:
-		return nil, hint, fmt.Errorf("error parsing the csv file: %w", err)
+		return fmt.Errorf("error parsing the changes.csv file: %w", err)
 	}
-	fp.requestTime = time.Now()
-	success = true
-	return f, driver.Fingerprint(fp.String()), nil
+	return nil
+}
+
+// processDeletions deals with the published deletions.csv, adding records
+// to the wtr is they are deemed to have changed since the compressed
+// file was last processed. wtr and fp can be modified.
+func (u *VEXUpdater) processDeletions(ctx context.Context, wtr io.Writer, fp *fingerprint) error {
+	deletionURI, err := u.url.Parse(deletionsFile)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, deletionURI.String(), nil)
+	if err != nil {
+		return err
+	}
+	if fp.deletionsEtag != "" {
+		req.Header.Add("If-None-Match", fp.deletionsEtag)
+	}
+	res, err := u.client.Do(req)
+	if res != nil {
+		defer res.Body.Close()
+	}
+	if err != nil {
+		return err
+	}
+
+	switch res.StatusCode {
+	case http.StatusOK:
+		if t := fp.deletionsEtag; t == "" || t != res.Header.Get("etag") {
+			break
+		}
+		fallthrough
+	case http.StatusNotModified, http.StatusNotFound: // TODO: Remove StatusNotFound once deletions.csv is implemented.
+		return nil
+	default:
+		return fmt.Errorf("unexpected response from deletions.csv: %s", res.Status)
+	}
+	fp.deletionsEtag = res.Header.Get("etag")
+
+	rd := csv.NewReader(res.Body)
+	rd.FieldsPerRecord = 2
+	rd.ReuseRecord = true
+	var buf, bc bytes.Buffer
+	rec, err := rd.Read()
+	for ; err == nil; rec, err = rd.Read() {
+		if len(rec) != 2 {
+			return fmt.Errorf("could not parse deletions.csv file")
+		}
+
+		cvePath, uTime := rec[0], rec[1]
+		updatedTime, err := time.Parse(time.RFC3339, uTime)
+		if err != nil {
+			return err
+		}
+		if updatedTime.After(fp.requestTime) {
+			deletedJSON, err := createDeletedJSON(cvePath)
+			if err != nil {
+				zlog.Warn(ctx).Err(err).Msg("error creating JSON object denoting deletion")
+			}
+			bc.Write(deletedJSON)
+			bc.WriteByte('\n')
+			wtr.Write(bc.Bytes())
+			buf.Reset()
+			bc.Reset()
+		}
+	}
+	switch err {
+	case io.EOF:
+	default:
+		return fmt.Errorf("error parsing the deletions.csv file: %w", err)
+	}
+	return nil
+}
+
+func createDeletedJSON(cvePath string) ([]byte, error) {
+	ms := cvePathRegex.FindStringSubmatch(cvePath)
+	if len(ms) != 2 {
+		return nil, errors.New("failed to parse CVE path")
+	}
+	j := fmt.Sprintf(deletedTemplate, strings.ToUpper(ms[1]))
+	return []byte(j), nil
 }
