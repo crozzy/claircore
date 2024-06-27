@@ -211,6 +211,7 @@ func (c *creator) knownAffectedVulnerabilities(ctx context.Context, v csaf.Vulne
 				Msg("could not find package in product tree")
 			continue
 		}
+		vuln := protoVulnFunc()
 		// It is possible that we will not find a pURL, in that case
 		// the package.Name will be reported as-is.
 		purlHelper, ok := compProd.IdentificationHelper["purl"]
@@ -225,9 +226,20 @@ func (c *creator) knownAffectedVulnerabilities(ctx context.Context, v csaf.Vulne
 			default:
 				pkgName = purl.Name
 			}
-			if purl.Type != packageurl.TypeRPM || purl.Namespace != "redhat" {
-				// Just ingest advisories that are Red Hat RPMs, this will
-				// probably change down the line when we consolidate updaters.
+			if purl.Namespace != "redhat" {
+				// Not Red Hat content.
+				continue
+			}
+			switch purl.Type {
+			case packageurl.TypeRPM:
+				wfn, err := cpe.Unbind(cpeHelper)
+				if err != nil {
+					return nil, fmt.Errorf("could not unbind cpe: %s %w", cpeHelper, err)
+				}
+				vuln.Repo = c.rc.Get(wfn)
+			case packageurl.TypeOCI:
+				vuln.Repo = rhccRepo
+			default:
 				continue
 			}
 		}
@@ -237,20 +249,13 @@ func (c *creator) knownAffectedVulnerabilities(ctx context.Context, v csaf.Vulne
 			continue
 		}
 
-		vuln := protoVulnFunc()
-		// What is the deal here? Just stick the package name in and f-it?
-		// That's the plan so far as there's no PURL product ID helper.
 		vuln.Package = &claircore.Package{
 			Name: pkgName,
 			Kind: claircore.SOURCE,
 		}
 
-		wfn, err := cpe.Unbind(cpeHelper)
-		if err != nil {
-			return nil, fmt.Errorf("could not unbind cpe: %s %w", cpeHelper, err)
-		}
-		vuln.Repo = c.rc.Get(wfn)
 		if sc := c.c.FindScore(pc); sc != nil {
+			var err error
 			vuln.NormalizedSeverity, vuln.Severity, err = CVSSVectorFromScore(sc)
 			if err != nil {
 				return nil, fmt.Errorf("could not parse CVSS score: %w, file: %s", err, c.vulnLink)
@@ -327,9 +332,8 @@ func (c *creator) fixedVulnerabilities(ctx context.Context, v csaf.Vulnerability
 			// containers have no say in the kernel.
 			continue
 		}
-		if purl.Type != packageurl.TypeRPM || purl.Namespace != "redhat" {
-			// Just ingest advisories that are Red Hat RPMs, this will
-			// probably change down the line when we consolidate updaters.
+		if purl.Namespace != "redhat" {
+			// Not Red Hat content.
 			continue
 		}
 
@@ -350,12 +354,19 @@ func (c *creator) fixedVulnerabilities(ctx context.Context, v csaf.Vulnerability
 				vuln.Package.Arch = arch
 				vuln.ArchOperation = claircore.OpPatternMatch
 			}
-
-			wfn, err := cpe.Unbind(cpeHelper)
-			if err != nil {
-				return nil, fmt.Errorf("could not unbind cpe: %s %w", cpeHelper, err)
+			switch purl.Type {
+			case packageurl.TypeRPM:
+				wfn, err := cpe.Unbind(cpeHelper)
+				if err != nil {
+					return nil, fmt.Errorf("could not unbind cpe: %s %w", cpeHelper, err)
+				}
+				vuln.Repo = c.rc.Get(wfn)
+			case packageurl.TypeOCI:
+				vuln.Repo = rhccRepo
+			default:
+				continue
 			}
-			vuln.Repo = c.rc.Get(wfn)
+
 			// Find remediations and add RHSA URL to links
 			rem := c.c.FindRemediation(pc)
 			if rem != nil {
