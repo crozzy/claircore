@@ -11,15 +11,21 @@ import (
 
 	"github.com/quay/zlog"
 
+	"github.com/quay/claircore"
+
 	"github.com/quay/claircore/libvuln/driver"
 )
 
 var (
-	_ driver.Updater           = (*VEXUpdater)(nil)
-	_ driver.Configurable      = (*VEXUpdater)(nil)
-	_ driver.DeltaUpdater      = (*VEXUpdater)(nil)
-	_ driver.UpdaterSetFactory = (*Factory)(nil)
-	_ driver.Configurable      = (*Factory)(nil)
+	_        driver.Updater           = (*VEXUpdater)(nil)
+	_        driver.Configurable      = (*VEXUpdater)(nil)
+	_        driver.DeltaUpdater      = (*VEXUpdater)(nil)
+	_        driver.UpdaterSetFactory = (*Factory)(nil)
+	_        driver.Configurable      = (*Factory)(nil)
+	rhccRepo                          = &claircore.Repository{
+		Name: "Red Hat Container Catalog",
+		URI:  `https://catalog.redhat.com/software/containers/explore`,
+	}
 )
 
 const (
