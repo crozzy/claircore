@@ -388,7 +388,7 @@ database.</p>
 <pre><code>package libvuln // import "github.com/quay/claircore/libvuln"
 
 type Options struct {
-	// Store is the interface used to persist and retrieve vulnerabilites
+	// Store is the interface used to persist and retrieve vulnerabilities
 	// for of matching.
 	Store datastore.MatcherStore
 	// Locker provides system-wide locks for the updater subsystem. If the
@@ -590,7 +590,7 @@ stateDiagram-v2
 %% note right of FetchLayers: Determine which layers need to be indexed and fetch them.
 %% note right of ScanLayers: Concurrently run needed Indexers on layers.
 %% note right of Coalesce: Compute the final contents of the container image.
-%% note right of IndexManifest: Associate all the discoved data.
+%% note right of IndexManifest: Associate all the discovered data.
 %% note right of IndexFinished: Persist the results.
 </pre>
 <h2 id="data-model"><a class="header" href="#data-model">Data Model</a></h2>
@@ -624,8 +624,8 @@ The following are the URLs used.</p>
 <ul>
 <li>https://search.maven.org/solrsearch/select</li>
 <li>https://catalog.redhat.com/api/containers/</li>
-<li>https://access.redhat.com/security/data/metrics/repository-to-cpe.json</li>
-<li>https://access.redhat.com/security/data/metrics/container-name-repos-map.json</li>
+<li>https://security.access.redhat.com/data/metrics/repository-to-cpe.json</li>
+<li>https://security.access.redhat.com/data/metrics/container-name-repos-map.json</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="matcher-architecture"><a class="header" href="#matcher-architecture">Matcher Architecture</a></h1>
 <p><code>claircore/internal/matcher</code>
@@ -645,7 +645,7 @@ graph TD
 	subgraph Matcher
 		dbv[Check versions in-database]
 		ma[Filter interested packages]
-		adv[Retrive vulnerabilty information]
+		adv[Retrieve vulnerability information]
 		mv[Deicide vulnerability]
 		ma --&gt; adv --&gt; mv
 		adv -.-&gt; dbv -.-&gt; mv
@@ -788,9 +788,10 @@ dynamically.</p>
 <li>https://nvd.nist.gov/feeds/json/cve/1.1/</li>
 <li>https://linux.oracle.com/security/oval/com.oracle.elsa-&ast;.xml.bz2</li>
 <li>https://packages.vmware.com/photon/photon_oval_definitions/</li>
-<li>https://access.redhat.com/security/data/metrics/cvemap.xml</li>
+<li>https://security.access.redhat.com/data/metrics/cvemap.xml</li>
 <li>https://access.redhat.com/security/cve/</li>
-<li>https://access.redhat.com/security/data/oval/v2/PULP_MANIFEST</li>
+<li>https://security.access.redhat.com/data/oval/v2/PULP_MANIFEST</li>
+<li>https://security.access.redhat.com/data/csaf/v2/vex/</li>
 <li>https://support.novell.com/security/oval/</li>
 <li>https://api.launchpad.net/1.0/</li>
 <li>https://security-metadata.canonical.com/oval/com.ubuntu.&ast;.cve.oval.xml</li>
@@ -1390,6 +1391,9 @@ EnrichmentUpdater</p>
 // vulnerabilities, and ensures vulnerabilities from previous updates are
 // not queried by clients.
 UpdateVulnerabilities(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulns []*claircore.Vulnerability) (uuid.UUID, error)
+// UpdateVulnerabilitiesIter performs the same operation as
+// UpdateVulnerabilities, but accepting an iterator function.
+UpdateVulnerabilitiesIter(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulnIter VulnerabilityIter) (uuid.UUID, error)
 // DeltaUpdateVulnerabilities creates a new UpdateOperation consisting of existing
 // vulnerabilities and new vulnerabilities. It also takes an array of deleted
 // vulnerability names which should no longer be available to query.
@@ -1456,6 +1460,9 @@ type Updater interface {
 	// vulnerabilities, and ensures vulnerabilities from previous updates are
 	// not queried by clients.
 	UpdateVulnerabilities(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulns []*claircore.Vulnerability) (uuid.UUID, error)
+	// UpdateVulnerabilitiesIter performs the same operation as
+	// UpdateVulnerabilities, but accepting an iterator function.
+	UpdateVulnerabilitiesIter(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulnIter VulnerabilityIter) (uuid.UUID, error)
 	// DeltaUpdateVulnerabilities creates a new UpdateOperation consisting of existing
 	// vulnerabilities and new vulnerabilities. It also takes an array of deleted
 	// vulnerability names which should no longer be available to query.
@@ -1511,6 +1518,9 @@ type Updater interface {
 // EnrichmentRecord(s), and ensures enrichments from previous updates are not
 // queries by clients.
 UpdateEnrichments(ctx context.Context, kind string, fingerprint driver.Fingerprint, enrichments []driver.EnrichmentRecord) (uuid.UUID, error)
+// UpdateEnrichmentsIter performs the same operation as UpdateEnrichments, but
+// accepting an iterator function.
+UpdateEnrichmentsIter(ctx context.Context, kind string, fingerprint driver.Fingerprint, enIter EnrichmentIter) (uuid.UUID, error)
 }
 EnrichmentUpdater is an interface exporting the necessary methods for
 storing and querying Enrichments.</p>
@@ -1531,6 +1541,9 @@ type Updater interface {
 	// vulnerabilities, and ensures vulnerabilities from previous updates are
 	// not queried by clients.
 	UpdateVulnerabilities(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulns []*claircore.Vulnerability) (uuid.UUID, error)
+	// UpdateVulnerabilitiesIter performs the same operation as
+	// UpdateVulnerabilities, but accepting an iterator function.
+	UpdateVulnerabilitiesIter(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulnIter VulnerabilityIter) (uuid.UUID, error)
 	// DeltaUpdateVulnerabilities creates a new UpdateOperation consisting of existing
 	// vulnerabilities and new vulnerabilities. It also takes an array of deleted
 	// vulnerability names which should no longer be available to query.
@@ -1586,6 +1599,9 @@ type Updater interface {
 // EnrichmentRecord(s), and ensures enrichments from previous updates are not
 // queries by clients.
 UpdateEnrichments(ctx context.Context, kind string, fingerprint driver.Fingerprint, enrichments []driver.EnrichmentRecord) (uuid.UUID, error)
+// UpdateEnrichmentsIter performs the same operation as UpdateEnrichments, but
+// accepting an iterator function.
+UpdateEnrichmentsIter(ctx context.Context, kind string, fingerprint driver.Fingerprint, enIter EnrichmentIter) (uuid.UUID, error)
 }
 EnrichmentUpdater is an interface exporting the necessary methods for
 storing and querying Enrichments.</p>
@@ -1616,6 +1632,9 @@ EnrichmentUpdater</p>
 // vulnerabilities, and ensures vulnerabilities from previous updates are
 // not queried by clients.
 UpdateVulnerabilities(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulns []*claircore.Vulnerability) (uuid.UUID, error)
+// UpdateVulnerabilitiesIter performs the same operation as
+// UpdateVulnerabilities, but accepting an iterator function.
+UpdateVulnerabilitiesIter(ctx context.Context, updater string, fingerprint driver.Fingerprint, vulnIter VulnerabilityIter) (uuid.UUID, error)
 // DeltaUpdateVulnerabilities creates a new UpdateOperation consisting of existing
 // vulnerabilities and new vulnerabilities. It also takes an array of deleted
 // vulnerability names which should no longer be available to query.
@@ -1672,6 +1691,9 @@ type EnrichmentUpdater interface {
 	// EnrichmentRecord(s), and ensures enrichments from previous updates are not
 	// queries by clients.
 	UpdateEnrichments(ctx context.Context, kind string, fingerprint driver.Fingerprint, enrichments []driver.EnrichmentRecord) (uuid.UUID, error)
+	// UpdateEnrichmentsIter performs the same operation as UpdateEnrichments, but
+	// accepting an iterator function.
+	UpdateEnrichmentsIter(ctx context.Context, kind string, fingerprint driver.Fingerprint, enIter EnrichmentIter) (uuid.UUID, error)
 }
     EnrichmentUpdater is an interface exporting the necessary methods for
     storing and querying Enrichments.
@@ -1701,7 +1723,7 @@ type Manifest struct {
 	// content addressable hash. should be able to be computed via
 	// the hashes of all included layers
 	Hash Digest `json:"hash"`
-	// an array of filesystem layers indexed in the same order as the cooresponding image
+	// an array of filesystem layers indexed in the same order as the corresponding image
 	Layers []*Layer `json:"layers"`
 }
     Manifest represents a docker image. Layers array MUST be indexed in the
