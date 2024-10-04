@@ -44,7 +44,8 @@ type ScannerConfig struct {
 	// See also [DefaultName2ReposMappingURL]
 	Name2ReposMappingURL string `json:"name2repos_mapping_url" yaml:"name2repos_mapping_url"`
 	// Name2ReposMappingFile is a path to a local mapping file.
-	Name2ReposMappingFile string `json:"name2repos_mapping_file" yaml:"name2repos_mapping_file"`
+	Name2ReposMappingFile     string `json:"name2repos_mapping_file" yaml:"name2repos_mapping_file"`
+	Name2ReposMappingArtifact string `json:"name2repos_mapping_artifact" yaml:"name2repos_mapping_artifact"`
 	// Timeout is a timeout for all network calls made to update the mapping
 	// file.
 	//
@@ -70,12 +71,20 @@ func (s *scanner) Configure(ctx context.Context, f indexer.ConfigDeserializer, c
 		s.cfg.Timeout = 10 * time.Second
 	}
 	var mf *mappingFile
+	var err error
 	switch {
-	case s.cfg.Name2ReposMappingURL == "" && s.cfg.Name2ReposMappingFile == "":
+	case s.cfg.Name2ReposMappingURL == "" && s.cfg.Name2ReposMappingFile == "" && s.cfg.Name2ReposMappingArtifact == "":
 		// defaults
 		s.cfg.Name2ReposMappingURL = DefaultName2ReposMappingURL
 	case s.cfg.Name2ReposMappingURL != "" && s.cfg.Name2ReposMappingFile == "":
 		// remote only
+	case s.cfg.Name2ReposMappingArtifact != "":
+		// grab file from artifact
+		s.cfg.Name2ReposMappingFile, err = common.FetchArtifact(ctx, s.cfg.Name2ReposMappingArtifact)
+		if err != nil {
+			return err
+		}
+		fallthrough
 	case s.cfg.Name2ReposMappingFile != "":
 		// local only
 		f, err := os.Open(s.cfg.Name2ReposMappingFile)

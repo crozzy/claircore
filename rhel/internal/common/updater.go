@@ -4,14 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	oc "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/quay/zlog"
 	"golang.org/x/time/rate"
+	oras "oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content/file"
+	"oras.land/oras-go/v2/registry"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 // Interval is how often we attempt to update the mapping file.
@@ -111,4 +119,49 @@ func (u *Updater) Fetch(ctx context.Context, c *http.Client) error {
 	u.value.Store(v)
 	zlog.Debug(ctx).Msg("atomic update of local mapping file complete")
 	return nil
+}
+
+func FetchArtifact(ctx context.Context, imageName string) (string, error) {
+	ctx = zlog.ContextWithValues(ctx,
+		"component", "rhel/internal/common/Updater.Fetch",
+		"image", imageName)
+
+	ref, err := registry.ParseReference(imageName)
+	if err != nil {
+		return "", err
+	}
+	reg, err := remote.NewRegistry(ref.Registry)
+	if err != nil {
+		return "", err
+	}
+
+	src, err := reg.Repository(ctx, ref.Repository)
+	if err != nil {
+		return "", err
+	}
+	td := os.TempDir()
+	dst, err := file.New(td)
+	if err != nil {
+		return "", err
+	}
+	desc, err := oras.Copy(ctx, src, ref.Reference, dst, ref.Reference, oras.DefaultCopyOptions)
+	if err != nil {
+		return "", err
+	}
+	r, err := dst.Fetch(ctx, desc)
+	if err != nil {
+		return "", err
+	}
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	var man oc.Manifest
+	json.Unmarshal(b, &man)
+	if len(man.Layers) != 1 {
+		return "", fmt.Errorf("irregular number of layers, expected 1 got %d", len(man.Layers))
+	}
+	l := man.Layers[0]
+	fn := l.Annotations["org.opencontainers.image.title"]
+	return filepath.Join(td, fn), nil
 }

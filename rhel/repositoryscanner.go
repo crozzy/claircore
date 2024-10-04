@@ -86,7 +86,8 @@ type RepositoryScannerConfig struct {
 	// Repo2CPEMappingFile, if specified, is consulted instead of the [Repo2CPEMappingURL].
 	//
 	// This should be provided to avoid any network traffic.
-	Repo2CPEMappingFile string `json:"repo2cpe_mapping_file" yaml:"repo2cpe_mapping_file"`
+	Repo2CPEMappingFile     string `json:"repo2cpe_mapping_file" yaml:"repo2cpe_mapping_file"`
+	Repo2CPEMappingArtifact string `json:"repo2cpe_mapping_artifact" yaml:"repo2cpe_mapping_artifact"`
 	// Timeout controls the timeout for any remote calls this package makes.
 	//
 	// The default is 10 seconds.
@@ -133,12 +134,20 @@ func (r *RepositoryScanner) Configure(ctx context.Context, f indexer.ConfigDeser
 	}
 
 	var mf *mappingFile
+	var err error
 	switch {
-	case r.cfg.Repo2CPEMappingURL == "" && r.cfg.Repo2CPEMappingFile == "":
+	case r.cfg.Repo2CPEMappingURL == "" && r.cfg.Repo2CPEMappingFile == "" && r.cfg.Repo2CPEMappingArtifact == "":
 		// defaults
 		r.cfg.Repo2CPEMappingURL = DefaultRepo2CPEMappingURL
 	case r.cfg.Repo2CPEMappingURL != "" && r.cfg.Repo2CPEMappingFile == "":
 		// remote only
+	case r.cfg.Repo2CPEMappingArtifact != "":
+		// grab file from artifact
+		r.cfg.Repo2CPEMappingFile, err = common.FetchArtifact(ctx, r.cfg.Repo2CPEMappingArtifact)
+		if err != nil {
+			return err
+		}
+		fallthrough
 	case r.cfg.Repo2CPEMappingFile != "":
 		// seed from file
 		f, err := os.Open(r.cfg.Repo2CPEMappingFile)
@@ -156,6 +165,7 @@ func (r *RepositoryScanner) Configure(ctx context.Context, f indexer.ConfigDeser
 			return err
 		}
 	}
+
 	r.upd = common.NewUpdater(r.cfg.Repo2CPEMappingURL, mf)
 	tctx, done := context.WithTimeout(ctx, r.cfg.Timeout)
 	defer done()
