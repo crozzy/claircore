@@ -138,14 +138,15 @@ func TestParse(t *testing.T) {
 		}
 		t.Logf("parsed %d vulnerabilities", len(vs))
 		if len(vs) != 0 {
-			t.Log("first one:")
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.SetIndent("", "\t")
-			if err := enc.Encode(vs[0]); err != nil {
-				t.Error(err)
+			for _, v := range vs {
+				var buf bytes.Buffer
+				enc := json.NewEncoder(&buf)
+				enc.SetIndent("", "\t")
+				if err := enc.Encode(v); err != nil {
+					t.Error(err)
+				}
+				t.Log(buf.String())
 			}
-			t.Log(buf.String())
 		}
 	}
 }
