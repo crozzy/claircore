@@ -124,7 +124,7 @@ func (u *Updater) importV1(ctx context.Context, sys fs.FS) error {
 		}
 
 		// Load into DB.
-		if len(res.Vulnerabilities.Vulnerability) != 0 {
+		if res.Vulnerabilities != nil && len(res.Vulnerabilities.Vulnerability) != 0 {
 			if err := u.store.UpdateVulnerabilities(ctx, ref, name, fp, res.Vulnerabilities); err != nil {
 				return err
 			}
@@ -135,6 +135,12 @@ func (u *Updater) importV1(ctx context.Context, sys fs.FS) error {
 				return err
 			}
 			zlog.Info(ctx).Stringer("ref", ref).Msg("updated enrichments")
+		}
+		if len(res.IndexerData) != 0 {
+			if err := u.indexerStore.UpdateIndexerData(ctx, fp, res.IndexerData); err != nil {
+				return err
+			}
+			zlog.Info(ctx).Stringer("ref", ref).Msg("updated indexer data")
 		}
 	}
 

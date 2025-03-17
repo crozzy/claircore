@@ -67,3 +67,8 @@ type VulnerabilityParser interface {
 type EnrichmentParser interface {
 	ParseEnrichment(context.Context, fs.FS) ([]EnrichmentRecord, error)
 }
+
+// TODO(crozzy): docs
+type IndexerDataParser interface {
+	ParseIndexerData(context.Context, fs.FS) ([]IndexerData, error)
+}
