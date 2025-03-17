@@ -86,3 +86,9 @@ type Repository struct {
 	URI  string
 	CPE  cpe.WFN
 }
+
+type IndexerData struct {
+	Namespace string
+	Key       string
+	Value     []byte
+}

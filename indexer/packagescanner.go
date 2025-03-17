@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"iter"
 
 	"github.com/quay/claircore"
 )
@@ -52,4 +53,9 @@ func NewPackageScannerMock(name, version, kind string) PackageScanner {
 // pre-defined repository.
 type DefaultRepoScanner interface {
 	DefaultRepository(context.Context) *claircore.Repository
+}
+
+type ComplexPackageDetector interface {
+	VersionedScanner
+	Analyze(context.Context, DataLookup, *claircore.Layer) (iter.Seq2[claircore.Package, error], error)
 }
