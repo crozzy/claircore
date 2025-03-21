@@ -25,6 +25,11 @@ type Store interface {
 	GetLatestUpdateOperations(ctx context.Context) ([]driver.UpdateOperation, error)
 }
 
+// TODO(crozzy): Docs
+type IndexerStore interface {
+	UpdateIndexerData(ctx context.Context, fp driver.Fingerprint, id []driver.IndexerData) error
+}
+
 // Locker is the Context-based locking Updater expects.
 type Locker interface {
 	// TryLock returns a canceled Context if it would need to wait to acquire
