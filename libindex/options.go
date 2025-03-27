@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/quay/claircore/indexer"
+	"github.com/quay/claircore/updater/driver/v1"
 )
 
 const (
@@ -49,4 +50,9 @@ type Options struct {
 		Package, Dist, Repo, File map[string]func(interface{}) error
 	}
 	Resolvers []indexer.Resolver
+	// Updater specific configs
+	UpdaterConfigs   map[string]driver.ConfigUnmarshaler
+	UpdateInterval   time.Duration
+	UpdateBundleURL  string
+	UpdateBundlePath string
 }

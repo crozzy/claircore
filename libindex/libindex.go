@@ -27,6 +27,8 @@ import (
 	"github.com/quay/claircore/rhel/rhcc"
 	"github.com/quay/claircore/rpm"
 	"github.com/quay/claircore/ruby"
+	"github.com/quay/claircore/updater"
+	"github.com/quay/claircore/updater/driver/v1"
 	"github.com/quay/claircore/whiteout"
 )
 
@@ -159,6 +161,38 @@ func New(ctx context.Context, opts *Options, cl *http.Client) (*Libindex, error)
 	if err != nil {
 		return nil, err
 	}
+
+	if opts.UpdaterConfigs == nil {
+		opts.UpdaterConfigs = make(map[string]driver.ConfigUnmarshaler)
+	}
+
+	u, err := updater.New(ctx, &updater.Options{
+		IndexerStore: l.store,
+		Locker:       l.locker,
+		Client:       l.client,
+		Factories: []driver.UpdaterFactory{
+			&rhel.UpdaterFactory{},
+		},
+		Configs: opts.UpdaterConfigs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.UpdateInterval < time.Duration(24*time.Hour) {
+		// Update interval is either unset or unrealistically small
+		opts.UpdateInterval = DefaultInterval
+	}
+
+	m := Manager{
+		// TODO(crozzy): Review naming here
+		updater:            u,
+		interval:           opts.UpdateInterval,
+		additionalDataURL:  opts.UpdateBundleURL,
+		additionalDataPath: opts.UpdateBundlePath,
+	}
+
+	go m.Start(ctx)
 
 	return l, nil
 }

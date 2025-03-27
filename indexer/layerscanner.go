@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"net"
 	"runtime"
 
@@ -201,7 +202,7 @@ func (ls *LayerScanner) scanLayer(ctx context.Context, l *claircore.Layer, s Ver
 	}
 
 	var result result
-	if err := result.Do(ctx, s, l); err != nil {
+	if err := result.Do(ctx, s, l, ls.store); err != nil {
 		return err
 	}
 
@@ -227,7 +228,7 @@ type result struct {
 // Do asserts the Scanner back to having a Scan method, and then calls it.
 //
 // The success value is captured and the error value is returned by Do.
-func (r *result) Do(ctx context.Context, s VersionedScanner, l *claircore.Layer) error {
+func (r *result) Do(ctx context.Context, s VersionedScanner, l *claircore.Layer, dl DataLookup) error {
 	var err error
 	switch s := s.(type) {
 	case PackageScanner:
@@ -243,6 +244,25 @@ func (r *result) Do(ctx context.Context, s VersionedScanner, l *claircore.Layer)
 		r.repos, err = s.Scan(ctx, l)
 	case FileScanner:
 		r.files, err = s.Scan(ctx, l)
+	case ComplexPackageDetector:
+		// TODO (crozzy): separate generic function here?
+		var ps iter.Seq2[claircore.Package, error]
+		ps, err = s.Analyze(ctx, dl, l)
+		for p, iErr := range ps {
+			if iErr != nil {
+				zlog.Warn(ctx).Str("detector", s.Name()).Err(iErr).Msg("error detecting package")
+			}
+			r.pkgs = append(r.pkgs, &p)
+		}
+	case ComplexRepositoryDetector:
+		var repos iter.Seq2[claircore.Repository, error]
+		repos, err = s.Analyze(ctx, dl, l)
+		for repo, iErr := range repos {
+			if iErr != nil {
+				zlog.Warn(ctx).Str("detector", s.Name()).Err(iErr).Msg("error detecting repository")
+			}
+			r.repos = append(r.repos, &repo)
+		}
 	default:
 		panic(fmt.Sprintf("programmer error: unknown type %T used as scanner", s))
 	}
