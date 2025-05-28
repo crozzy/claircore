@@ -95,6 +95,8 @@ jobs:
           path: |
             ~/.cache/clair-testing
       - name: Tests
+        # This script hard-codes some values for GitHub hosted runners, taken from
+        # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
         run: |
           if test -f ~/ok-by-run; then
             echo "::notice title=Commit Previously Passed::See $(cat ~/ok-by-run) (cache key 'commit-ok-${{ matrix.go }}-${{ github.sha }}')"
@@ -103,12 +105,13 @@ jobs:
           printf '%s/%s/actions/runs/%s/attempts/%s\n'\
             "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"\
             > ~/ok-by-run
+          export GOMAXPROCS=3 GOMEMLIMIT=10GiB
           find . -name .git -prune -o -name testdata -prune -o -name go.mod -printf '%h\n' |
           while read -r dir; do (
             cd "$dir"
             go list -m
             go mod download
-            GOMAXPROCS=2 go test -race ${RUNNER_DEBUG:+-v} "-coverprofile=${{ runner.temp }}/$(go list -m | tr / _).codecov.out" -covermode=atomic ./...
+            go test -race ${RUNNER_DEBUG:+-v} "-coverprofile=${{ runner.temp }}/$(go list -m | tr / _).codecov.out" -covermode=atomic ./...
           ); done
       - name: Codecov
         if: >-
