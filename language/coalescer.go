@@ -36,8 +36,9 @@ func (c *coalescer) Coalesce(_ context.Context, ls []*indexer.LayerArtifacts) (*
 	// id -> package, it maps filepath -> package.
 	// For language packages, it is possible the
 	// filepath is overwritten between subsequent layers.
-	packages := make(map[string]*claircore.Package)
+	seenPackages := make(map[string]*claircore.Package)
 	for i := len(ls) - 1; i >= 0; i-- {
+		layerPackages := make(map[string][]*claircore.Package)
 		l := ls[i]
 		// If we didn't find at least one repo in this layer
 		// no point searching for packages.
@@ -50,10 +51,8 @@ func (c *coalescer) Coalesce(_ context.Context, ls []*indexer.LayerArtifacts) (*
 			ir.Repositories[r.ID] = r
 		}
 		for _, pkg := range l.Pkgs {
-			if seen, exists := packages[pkg.Filepath]; exists {
-				// If the package was renamed or has a different version in a higher (previously seen) layer,
-				// then this is considered a different package.
-				// In that case, ignore the original package in the lower (this) layer.
+			layerPackages[pkg.Name+"_"+pkg.Filepath] = append(layerPackages[pkg.Name+"_"+pkg.Filepath], pkg)
+			if seen, exists := seenPackages[pkg.Name+"_"+pkg.Filepath]; exists {
 				if pkg.Name != seen.Name || pkg.Version != seen.Version {
 					continue
 				}
@@ -62,7 +61,6 @@ func (c *coalescer) Coalesce(_ context.Context, ls []*indexer.LayerArtifacts) (*
 				delete(ir.Packages, seen.ID)
 				delete(ir.Environments, seen.ID)
 			}
-			packages[pkg.Filepath] = pkg
 			ir.Packages[pkg.ID] = pkg
 			ir.Environments[pkg.ID] = []*claircore.Environment{
 				{
@@ -70,6 +68,12 @@ func (c *coalescer) Coalesce(_ context.Context, ls []*indexer.LayerArtifacts) (*
 					IntroducedIn:  l.Hash,
 					RepositoryIDs: rs,
 				},
+			}
+
+		}
+		for _, pkgs := range layerPackages {
+			for _, pkg := range pkgs {
+				seenPackages[pkg.Name+"_"+pkg.Filepath] = pkg
 			}
 		}
 	}

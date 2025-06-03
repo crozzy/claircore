@@ -156,3 +156,136 @@ func TestCoalescerPackageOverwrite(t *testing.T) {
 		t.Fatalf("unexpected introducedIn: %s != %s", envs[0].IntroducedIn.String(), hashes[2].String())
 	}
 }
+
+func TestCoalescerJavaPackages(t *testing.T) {
+	t.Parallel()
+	ctx := zlog.Test(context.Background(), t)
+	coalescer := &coalescer{}
+	repo := []*claircore.Repository{{
+		Name: "maven",
+		URI:  "https://repo1.maven.apache.org/maven2",
+	}}
+	hashes := []claircore.Digest{
+		test.RandomSHA256Digest(t),
+		test.RandomSHA256Digest(t),
+		test.RandomSHA256Digest(t),
+	}
+	layerArtifacts := []*indexer.LayerArtifacts{
+		{
+			Hash: hashes[0],
+			Pkgs: []*claircore.Package{
+				{
+					ID:        "0",
+					Name:      "semver",
+					Version:   "7.3.8",
+					PackageDB: "maven:same/filepath",
+					Filepath:  "same/filepath",
+				}, {
+					ID:        "1",
+					Name:      "semver",
+					Version:   "7.3.10",
+					PackageDB: "maven:same/filepath",
+					Filepath:  "same/filepath",
+				},
+			},
+			Repos: repo,
+		},
+		{
+			Hash: hashes[1],
+		},
+		{
+			Hash: hashes[2],
+			Pkgs: []*claircore.Package{
+				{
+					ID:        "2",
+					Name:      "semver",
+					Version:   "7.3.11",
+					PackageDB: "maven:same/filepath",
+					Filepath:  "same/filepath",
+				},
+			},
+			Repos: repo,
+		},
+	}
+	ir, err := coalescer.Coalesce(ctx, layerArtifacts)
+	if err != nil {
+		t.Fatalf("received error from coalesce method: %v", err)
+	}
+	if len(ir.Packages) != 1 {
+		t.Fatalf("unexpected number of packages: %d != %d", len(ir.Packages), 1)
+	}
+	pkg, exists := ir.Packages["2"]
+	if !exists {
+		t.Fatal("expected package does not exist")
+	}
+	if pkg.Version != "7.3.11" {
+		t.Fatalf("unexpected version: %s != %s", pkg.Version, "7.3.11")
+	}
+	envs, exists := ir.Environments["2"]
+	if !exists {
+		t.Fatal("expected environments do not exist")
+	}
+	if len(envs) != 1 {
+		t.Fatalf("unexpected number of envionments: %d != %d", len(envs), 1)
+	}
+	if envs[0].IntroducedIn.String() != hashes[2].String() {
+		t.Fatalf("unexpected introducedIn: %s != %s", envs[0].IntroducedIn.String(), hashes[2].String())
+	}
+}
+
+func TestCoalescerJavaPackages2(t *testing.T) {
+	t.Parallel()
+	ctx := zlog.Test(context.Background(), t)
+	coalescer := &coalescer{}
+	repo := []*claircore.Repository{{
+		Name: "maven",
+		URI:  "https://repo1.maven.apache.org/maven2",
+	}}
+	hash := test.RandomSHA256Digest(t)
+
+	layerArtifacts := []*indexer.LayerArtifacts{
+		{
+			Hash: hash,
+			Pkgs: []*claircore.Package{
+				{
+					ID:        "0",
+					Name:      "semver",
+					Version:   "7.3.8",
+					PackageDB: "maven:same/filepath",
+					Filepath:  "same/filepath",
+				}, {
+					ID:        "1",
+					Name:      "semver",
+					Version:   "7.3.10",
+					PackageDB: "maven:same/filepath",
+					Filepath:  "same/filepath",
+				},
+			},
+			Repos: repo,
+		},
+	}
+	ir, err := coalescer.Coalesce(ctx, layerArtifacts)
+	if err != nil {
+		t.Fatalf("received error from coalesce method: %v", err)
+	}
+	if len(ir.Packages) != 2 {
+		t.Fatalf("unexpected number of packages: %d != %d", len(ir.Packages), 1)
+	}
+	pkg, exists := ir.Packages["1"]
+	if !exists {
+		t.Fatal("expected package does not exist")
+	}
+	if pkg.Version != "7.3.10" {
+		t.Fatalf("unexpected version: %s != %s", pkg.Version, "7.3.10")
+	}
+	envs, exists := ir.Environments["1"]
+	if !exists {
+		t.Fatal("expected environments do not exist")
+	}
+	if len(envs) != 1 {
+		t.Fatalf("unexpected number of envionments: %d != %d", len(envs), 1)
+	}
+	if envs[0].IntroducedIn.String() != hash.String() {
+		t.Fatalf("unexpected introducedIn: %s != %s", envs[0].IntroducedIn.String(), hash.String())
+	}
+}
