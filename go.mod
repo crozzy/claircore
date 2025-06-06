@@ -23,7 +23,7 @@ require (
 	github.com/quay/goval-parser v0.8.8
 	github.com/quay/zlog v1.1.8
 	github.com/remind101/migrate v0.0.0-20170729031349-52c1edff7319
-	github.com/rs/zerolog v1.30.0
+	github.com/rs/zerolog v1.34.0
 	github.com/spdx/tools-golang v0.5.5
 	github.com/ulikunitz/xz v0.5.11
 	go.opentelemetry.io/otel v1.36.0
