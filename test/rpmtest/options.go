@@ -55,22 +55,10 @@ func HintCompare(t testing.TB, repos []string) cmp.Option {
 			av.Del(keyHash)
 			bv.Del(keyHash)
 
-			ar, aok := av[keyRepo]
-			br, bok := bv[keyRepo]
-			switch {
-			case aok == bok: // Let the normal compare work.
-			case aok && !bok:
-				// If only the "a" values have repo values, make sure it's a
-				// subset of the allowed values.
-				if isSubset(repos, ar) {
-					av.Del(keyRepo)
-				}
-			case !aok && bok:
-				// Ditto for the "b" values.
-				if isSubset(repos, br) {
-					bv.Del(keyRepo)
-				}
-			}
+			// Ignore "repoid" keys for now, we cannot rely on accurate
+			// repo infomation from the pyxis API.
+			av.Del(keyRepo)
+			bv.Del(keyRepo)
 
 			return cmp.Equal(av.Encode(), bv.Encode())
 		}),

@@ -117,9 +117,10 @@ type link struct {
 
 type imagesResponse struct {
 	Data []struct {
-		ID     string         `json:"_id"`
-		Links  imageInfoLinks `json:"_links"`
-		Parsed struct {
+		ID          string         `json:"_id"`
+		Links       imageInfoLinks `json:"_links"`
+		ContentSets []string       `json:"content_sets"`
+		Parsed      struct {
 			Layers []claircore.Digest `json:"layers"`
 		} `json:"parsed_data"`
 	} `json:"data"`
@@ -262,7 +263,8 @@ func (doc hydraDoc) Run(dir string) func(*testing.T) {
 		if len(want) != len(got) {
 			t.Errorf("wanted %d packages but got %d", len(want), len(got))
 		}
-		opts := rpmtest.Options(t, nil)
+
+		opts := rpmtest.Options(t, image.Data[0].ContentSets)
 		if !cmp.Equal(got, want, opts) {
 			t.Error(cmp.Diff(got, want, opts))
 		}
