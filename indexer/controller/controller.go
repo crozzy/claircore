@@ -77,8 +77,7 @@ func (s *Controller) Index(ctx context.Context, manifest *claircore.Manifest) (*
 // Terminal state is encountered.
 func (s *Controller) run(ctx context.Context) (err error) {
 	var next State
-	var retry bool
-	var w time.Duration
+	var wait time.Duration
 
 	// As long as there's not an error and the current state isn't Terminal, run
 	// the corresponding function.
@@ -98,13 +97,24 @@ func (s *Controller) run(ctx context.Context) (err error) {
 		case errors.Is(err, nil):
 			// OK
 		case errors.Is(err, context.DeadlineExceeded):
-			// Either the function's internal deadline or the parent's deadline
-			// was hit.
-			retry = true
-		case errors.Is(err, context.Canceled):
-			// The parent context was canceled and the stateFunc noticed.
-			// Continuing the loop should drop execution out of it.
+			// Timeout: do not persist a possibly invalid report. Retry with backoff.
+			if wait == 0 {
+				wait = jitter()
+			}
+			t := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return ctx.Err()
+			case <-t.C:
+				t.Stop()
+			}
+			wait = jitter()
+			// Retry the same state without persisting.
 			continue
+		case errors.Is(err, context.Canceled):
+			// Parent context canceled: do not persist. Surface the error.
+			return err
 		default:
 			s.setState(IndexError)
 			zlog.Error(ctx).
@@ -113,6 +123,7 @@ func (s *Controller) run(ctx context.Context) (err error) {
 			s.report.Success = false
 			s.report.Err = err.Error()
 		}
+		// Persist only when we've either succeeded, or encountered a non-timeout error.
 		if setReportErr := s.Store.SetIndexReport(ctx, s.report); !errors.Is(setReportErr, nil) {
 			zlog.Info(ctx).
 				Err(setReportErr).
@@ -121,22 +132,6 @@ func (s *Controller) run(ctx context.Context) (err error) {
 			s.report.Err = fmt.Sprintf("failed persisting index report: %s", setReportErr.Error())
 			err = setReportErr
 			break
-		}
-		if retry {
-			t := time.NewTimer(w)
-			select {
-			case <-ctx.Done():
-			case <-t.C:
-			}
-			t.Stop()
-			w = jitter()
-			retry = false
-			// Execution is in this conditional because err ==
-			// context.DeadlineExceeded, so reset the err value to make sure the
-			// loop makes it back to the error handling switch above. If the
-			// context was canceled, the loop will end there; if not, there will
-			// be a retry.
-			err = nil
 		}
 		// This if statement preserves current behavior of not setting
 		// currentState to Terminal when it's returned. This should be an
