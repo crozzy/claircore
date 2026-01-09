@@ -26,11 +26,12 @@ import (
 //
 // Close must be called, or the program may panic.
 type Updater struct {
-	store     Store
-	locker    Locker
-	client    *http.Client
-	configs   driver.Configs
-	factories []driver.UpdaterFactory
+	store        Store
+	indexerStore IndexerStore
+	locker       Locker
+	client       *http.Client
+	configs      driver.Configs
+	factories    []driver.UpdaterFactory
 }
 
 // New returns an Updater ready to use.
@@ -38,7 +39,11 @@ type Updater struct {
 // None of the resources passed in the Options struct have any of their cleanup
 // methods called, and need to be safe for use by multiple goroutines.
 func New(ctx context.Context, opts *Options) (*Updater, error) {
-	if opts.Store == nil {
+	// TODO(crozzy): maybe change this logic, I'm not thrilled about having
+	// two seperate store interfaces but like needlessly fulfilling an interface
+	// where methods will be unused no-ops is also BS, maybe acceping something non-nil
+	// and casing later?
+	if opts.Store == nil && opts.IndexerStore == nil {
 		return nil, errors.New("updater: no Store implementation provided")
 	}
 	if opts.Client == nil {
@@ -46,11 +51,12 @@ func New(ctx context.Context, opts *Options) (*Updater, error) {
 	}
 
 	u := &Updater{
-		store:     opts.Store,
-		locker:    opts.Locker,
-		client:    opts.Client,
-		configs:   opts.Configs,
-		factories: opts.Factories,
+		store:        opts.Store,
+		locker:       opts.Locker,
+		client:       opts.Client,
+		configs:      opts.Configs,
+		factories:    opts.Factories,
+		indexerStore: opts.IndexerStore,
 	}
 
 	if opts.Locker == nil {
@@ -103,7 +109,8 @@ type Options struct {
 	Configs driver.Configs
 	// Factories is a slice of UpdaterFactories that are used to construct
 	// Updaters on demand.
-	Factories []driver.UpdaterFactory
+	Factories    []driver.UpdaterFactory
+	IndexerStore IndexerStore
 }
 
 // All the internal machinery deals with this taggedUpdater type, so that we
@@ -326,7 +333,24 @@ func (u *Updater) parseOne(ctx context.Context, tu taggedUpdater, in fs.FS) (*pa
 				Int("ct", len(res.Enrichments)).
 				Msg("found enrichments")
 		}
+		if p, ok := upd.(driver.IndexerDataParser); ok {
+			zlog.Debug(ctx).Msg("implements IndexerDataParser")
+			any = true
+			res.IndexerData, err = p.ParseIndexerData(ctx, in)
+			if err != nil {
+				return
+			}
+			zlog.Debug(ctx).
+				Err(err).
+				Int("ct", len(res.IndexerData)).
+				Msg("found indexer data")
+		}
+
 	})
+
+	if err != nil {
+		return nil, fmt.Errorf("error parsing data: %w", err)
+	}
 	if !any {
 		return nil, errors.New("did nothing")
 	}
@@ -336,6 +360,7 @@ func (u *Updater) parseOne(ctx context.Context, tu taggedUpdater, in fs.FS) (*pa
 type parseResult struct {
 	Vulnerabilities *driver.ParsedVulnerabilities
 	Enrichments     []driver.EnrichmentRecord
+	IndexerData     []driver.IndexerData
 }
 
 func (u *Updater) fetchAndParse(ctx context.Context, spool *os.File, pfps map[string]driver.Fingerprint, tu taggedUpdater) error {
@@ -386,6 +411,14 @@ func (u *Updater) fetchAndParse(ctx context.Context, spool *os.File, pfps map[st
 			}
 			zlog.Info(ctx).Stringer("ref", ref).Msg("updated enrichments")
 		}
+		if len(res.IndexerData) != 0 {
+			err = u.indexerStore.UpdateIndexerData(ctx, fp, res.IndexerData)
+			if err != nil {
+				return
+			}
+			zlog.Info(ctx).Stringer("ref", ref).Msg("updated indexer data")
+		}
+
 	})
 	if err != nil {
 		return err

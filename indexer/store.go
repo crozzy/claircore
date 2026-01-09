@@ -2,8 +2,11 @@ package indexer
 
 import (
 	"context"
+	"io"
 
 	"github.com/quay/claircore"
+
+	"github.com/quay/claircore/updater/driver/v1"
 )
 
 // Store is an interface for dealing with objects libindex needs to persist.
@@ -12,6 +15,7 @@ type Store interface {
 	Setter
 	Querier
 	Indexer
+	DataLookup
 	// Close frees any resources associated with the Store.
 	Close(context.Context) error
 }
@@ -85,4 +89,9 @@ type Indexer interface {
 	IndexFiles(ctx context.Context, files []claircore.File, layer *claircore.Layer, scnr VersionedScanner) error
 	// IndexManifest should index the coalesced manifest's content given an IndexReport.
 	IndexManifest(ctx context.Context, ir *claircore.IndexReport) error
+}
+
+type DataLookup interface {
+	GetData(ctx context.Context, namespace string, key string, dec func(context.Context, io.Reader) (any, error)) (any, error)
+	UpdateIndexerData(ctx context.Context, fp driver.Fingerprint, d []driver.IndexerData) error
 }
