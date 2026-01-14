@@ -3,6 +3,7 @@ package suse
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -10,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver"
-	"github.com/quay/zlog"
 	"golang.org/x/net/html"
 
 	"github.com/quay/claircore"
@@ -37,20 +37,16 @@ type Factory struct {
 
 // UpdaterSet implements [driver.UpdaterSetFactory].
 func (f *Factory) UpdaterSet(ctx context.Context) (driver.UpdaterSet, error) {
-	ctx = zlog.ContextWithValues(ctx, "component", "suse/Factory.UpdaterSet")
 	us := driver.NewUpdaterSet()
 	if f.c == nil {
-		zlog.Info(ctx).
-			Msg("unconfigured")
+		slog.InfoContext(ctx, "unconfigured")
 		return us, nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.base.String(), nil)
 	if err != nil {
 		return us, fmt.Errorf("suse: unable to construct request: %w", err)
 	}
-	zlog.Debug(ctx).
-		Stringer("url", f.base).
-		Msg("making request")
+	slog.DebugContext(ctx, "making request", "url", f.base)
 	res, err := f.c.Do(req)
 	if err != nil {
 		return us, fmt.Errorf("suse: error requesting %q: %w", f.base.String(), err)
@@ -128,26 +124,34 @@ var releases sync.Map
 
 func mkELDist(oURL, ver string) *claircore.Distribution {
 	name := strings.TrimSuffix(oURL, ".xml.gz")
-	v, _ := releases.LoadOrStore(name, &claircore.Distribution{
-		Name:       "SLES",
-		DID:        "sles",
-		Version:    ver,
-		VersionID:  ver,
-		PrettyName: "SUSE Linux Enterprise Server " + ver,
-	})
+	v, _ := releases.LoadOrStore(name, ELDist(ver))
 	return v.(*claircore.Distribution)
 }
 
 func mkLeapDist(oURL, ver string) *claircore.Distribution {
 	name := strings.TrimSuffix(oURL, ".xml.gz")
-	v, _ := releases.LoadOrStore(name, &claircore.Distribution{
+	v, _ := releases.LoadOrStore(name, leapDist(ver))
+	return v.(*claircore.Distribution)
+}
+
+func ELDist(ver string) *claircore.Distribution {
+	return &claircore.Distribution{
+		Name:       "SLES",
+		DID:        "sles",
+		Version:    ver,
+		VersionID:  ver,
+		PrettyName: "SUSE Linux Enterprise Server " + ver,
+	}
+}
+
+func leapDist(ver string) *claircore.Distribution {
+	return &claircore.Distribution{
 		Name:       "openSUSE Leap",
 		DID:        "opensuse-leap",
 		Version:    ver,
 		VersionID:  ver,
 		PrettyName: "openSUSE Leap " + ver,
-	})
-	return v.(*claircore.Distribution)
+	}
 }
 
 // FactoryConfig is the configuration accepted by the Factory.

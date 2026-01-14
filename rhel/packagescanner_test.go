@@ -1,14 +1,14 @@
 package rhel
 
 import (
-	"context"
+	"errors"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/quay/claircore"
-	"github.com/quay/zlog"
 
 	"github.com/quay/claircore/test"
 	"github.com/quay/claircore/test/rpmtest"
@@ -21,7 +21,7 @@ import (
 
 func TestPackageDetection(t *testing.T) {
 	t.Parallel()
-	ctx := zlog.Test(context.Background(), t)
+	ctx := test.Logging(t)
 	ms, err := filepath.Glob("testdata/package/*.txtar")
 	if err != nil {
 		panic("programmer error") // static glob
@@ -55,7 +55,6 @@ func TestPackageDetection(t *testing.T) {
 // get repoid information.
 func TestPackageScannerDNFWrapLogic(t *testing.T) {
 	t.Parallel()
-	ctx := zlog.Test(context.Background(), t)
 
 	tests := []struct {
 		name             string
@@ -86,7 +85,7 @@ func TestPackageScannerDNFWrapLogic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := zlog.Test(ctx, t)
+			ctx := test.Logging(t)
 
 			// Create layer from tar file
 			f, err := os.Open(tt.layerPath)
@@ -143,8 +142,42 @@ func TestPackageScannerDNFWrapLogic(t *testing.T) {
 
 			if !tt.expectRepoidHint && packagesWithRepoid > 0 {
 				t.Errorf("Expected no packages to have repoid hints, but found %d", packagesWithRepoid)
-
 			}
 		})
+	}
+}
+
+// TestPackageScannerPropagatesFindDBErrors ensures filesystem walk errors from FindDBs
+// are surfaced to the caller instead of being swallowed.
+func TestPackageScannerPropagatesFindDBErrors(t *testing.T) {
+	t.Parallel()
+	ctx := test.Logging(t)
+
+	// Point the layer at a non-existent directory to force WalkDir to fail immediately.
+	missingRoot := filepath.Join(t.TempDir(), "missing-root")
+
+	var l claircore.Layer
+	desc := claircore.LayerDescription{
+		Digest:    `sha256:` + "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
+		URI:       `file://` + missingRoot,
+		MediaType: `application/vnd.claircore.filesystem`,
+		Headers:   make(map[string][]string),
+	}
+	if err := l.Init(ctx, &desc, nil); err != nil {
+		t.Fatalf("init layer: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := l.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	scanner := &PackageScanner{}
+	_, err := scanner.Scan(ctx, &l)
+	if err == nil {
+		t.Fatalf("expected error from PackageScanner.Scan")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("expected error to wrap fs.ErrNotExist, got %v", err)
 	}
 }
