@@ -168,18 +168,7 @@ func EnrichedMatch(ctx context.Context, ir *claircore.IndexReport, ms []driver.M
 	rCh := make(chan *entry, lim)
 	eg, ectx := errgroup.WithContext(ctx)
 	eg.SetLimit(lim + 2) // Account for the static workers.
-	eg.Go(func() error { // Sender
-	Send:
-		for _, e := range es {
-			select {
-			case eCh <- e:
-			case <-ectx.Done():
-				break Send
-			}
-		}
-		close(eCh)
-		return nil
-	})
+
 	eg.Go(func() error { // Collector
 		em := make(map[string][]json.RawMessage)
 		for e := range rCh {
