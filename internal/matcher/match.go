@@ -165,12 +165,6 @@ func EnrichedMatch(ctx context.Context, ir *claircore.IndexReport, ms []driver.M
 		return nil, err
 	}
 
-	// Set up a pool to run the enrichers and attach results to the report.
-	eCh := make(chan driver.Enricher)
-	type entry struct {
-		kind string
-		msg  []json.RawMessage
-	}
 	rCh := make(chan *entry, lim)
 	eg, ectx := errgroup.WithContext(ctx)
 	eg.SetLimit(lim + 2) // Account for the static workers.
