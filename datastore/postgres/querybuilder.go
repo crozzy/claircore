@@ -13,6 +13,7 @@ import (
 	"github.com/quay/claircore/datastore"
 	"github.com/quay/claircore/internal/wart"
 	"github.com/quay/claircore/libvuln/driver"
+	"github.com/quay/claircore/toolkit/types/cpe"
 )
 
 // getQueryBuilder validates a IndexRecord and creates a query string for vulnerability matching
@@ -32,7 +33,7 @@ func buildGetQuery(record *claircore.IndexRecord, opts *datastore.GetOpts) (stri
 	exps = append(exps, packageQuery)
 
 	// If the package has a source, convert the first expression to an OR.
-	if record.Package.Source.Name != "" {
+	if record.Package.Source != nil && record.Package.Source.Name != "" {
 		sourcePackageQuery := goqu.And(
 			goqu.Ex{"package_name": record.Package.Source.Name},
 			goqu.Ex{"package_kind": wart.StringFromPackageKind(record.Package.Source.Kind)},
@@ -76,6 +77,10 @@ func buildGetQuery(record *claircore.IndexRecord, opts *datastore.GetOpts) (stri
 			ex = goqu.Ex{"repo_key": record.Repository.Key}
 		case driver.HasFixedInVersion:
 			ex = goqu.Ex{"fixed_in_version": goqu.Op{exp.NeqOp.String(): ""}}
+		case driver.CPESubstring:
+			exps = append(exps, cpeSubstringExpressions(record)...)
+			seen[m] = struct{}{}
+			continue
 		default:
 			return "", fmt.Errorf("was provided unknown matcher: %v", m)
 		}
@@ -139,4 +144,58 @@ func buildGetQuery(record *claircore.IndexRecord, opts *datastore.GetOpts) (stri
 		return "", err
 	}
 	return sql, nil
+}
+
+// cpeSubstringExpressions filters repo_name to the record CPE's part/vendor/product
+// prefix (indexable LIKE) then the SQL form of CPE substring match (starts_with + rtrim).
+func cpeSubstringExpressions(record *claircore.IndexRecord) []goqu.Expression {
+	if record == nil || record.Repository == nil {
+		return nil
+	}
+	w := record.Repository.CPE
+	fs := w.String()
+	if fs == "" {
+		return nil
+	}
+	var exps []goqu.Expression
+	if prefix := cpeProductPrefix(w); prefix != "" {
+		pat := likeEscape(prefix) + "%"
+		exps = append(exps, goqu.L("repo_name LIKE "+sqlString(pat)+" ESCAPE '\\'"))
+	}
+	exps = append(exps, goqu.L("starts_with("+sqlString(fs)+", rtrim(repo_name, ':*'))"))
+	return exps
+}
+
+// cpeProductPrefix returns the CPE 2.3 formatted-string prefix through the last
+// set part/vendor/product attribute, with a trailing colon. Product (or vendor)
+// ANY stops one attribute earlier so LIKE still matches concrete names.
+func cpeProductPrefix(w cpe.WFN) string {
+	fs := w.String()
+	if fs == "" {
+		return ""
+	}
+	last := -1
+	for a := cpe.Part; a <= cpe.Product; a++ {
+		if w.Attr[a].Kind != cpe.ValueSet {
+			break
+		}
+		last = int(a)
+	}
+	if last < 0 {
+		return ""
+	}
+	parts := strings.Split(fs, ":")
+	n := 2 + last + 1
+	if n > len(parts) {
+		return ""
+	}
+	return strings.Join(parts[:n], ":") + ":"
+}
+
+func likeEscape(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func sqlString(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
